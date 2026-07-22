@@ -1,14 +1,15 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import datetime
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Pro F&O Screener with Live News & Breakouts", layout="wide")
+st.set_page_config(page_title="Pro F&O Screener: News & Breakout Finder", layout="wide")
 
-st.title("⚡ Pro Intraday Screener: Extremely Bullish & News Stocks")
-st.subheader("Automated Momentum, News Badges, Target/SL & Live Charts")
+st.title("⚡ Pro Intraday Screener: Extremely Bullish & Fresh News Stocks")
+st.subheader("Automated Momentum, Fresh News Badges, Targets, SL & Live Charts")
 
-# Expanded Top FNO Stocks List
+# Top FNO Stocks List
 FNO_STOCKS = [
     "RELIANCE.NS", "TATAMOTORS.NS", "SBIN.NS", "ICICIBANK.NS", "INFY.NS",
     "TCS.NS", "AXISBANK.NS", "BHARTIARTL.NS", "TATASTEEL.NS", "HDFCBANK.NS",
@@ -18,7 +19,7 @@ FNO_STOCKS = [
     "HEROMOTOCO.NS", "EICHERMOT.NS", "BPCL.NS", "TATACHEM.NS", "HAL.NS"
 ]
 
-def analyze_stock_with_news(ticker):
+def analyze_stock_with_strict_news(ticker):
     try:
         t_obj = yf.Ticker(ticker)
         df = t_obj.history(period="5d", interval="5m")
@@ -38,7 +39,7 @@ def analyze_stock_with_news(ticker):
         if pd.isna(close) or pd.isna(vwap):
             return None, None
         
-        # Extremely Bullish Logic
+        # Extremely Bullish Condition
         is_high_volume = vol > (avg_vol * 1.3)
         near_day_high = close >= (day_high * 0.997)
         
@@ -49,42 +50,55 @@ def analyze_stock_with_news(ticker):
         else:
             status = "🔴 BEARISH (Buy PE)"
             
-        # Volume Spurt Status
         volume_status = "🔥 High Volume Spurt" if is_high_volume else "Normal"
 
-        # News Extraction
+        # STRICT FRESH NEWS CHECK (Last 48 Hours)
         news_items = t_obj.news
-        has_recent_news = "📰 News Stock" if news_items and len(news_items) > 0 else "---"
+        fresh_news_list = []
+        has_fresh_news = "---"
+
+        if news_items and len(news_items) > 0:
+            now = datetime.datetime.now()
+            for item in news_items:
+                pub_time = item.get('providerPublishTime', None)
+                if pub_time:
+                    pub_date = datetime.datetime.fromtimestamp(pub_time)
+                    # Checking if news was published within last 48 hours
+                    if (now - pub_date).total_seconds() <= 172800:
+                        fresh_news_list.append(item)
+
+            if len(fresh_news_list) > 0:
+                has_fresh_news = "📰 Fresh News Stock"
 
         row_data = {
             "Stock": ticker.replace(".NS", ""),
             "LTP": round(close, 2),
             "VWAP": round(vwap, 2),
             "Signal": status,
-            "News Tag": has_recent_news,
+            "News Tag": has_fresh_news,
             "Volume Momentum": volume_status,
             "Target (T1)": round(close * 1.01, 2) if "BULLISH" in status else round(close * 0.99, 2),
             "Target (T2)": round(close * 1.02, 2) if "BULLISH" in status else round(close * 0.98, 2),
             "Stop Loss (SL)": round(vwap, 2)
         }
         
-        return row_data, news_items
+        return row_data, fresh_news_list
     except Exception:
         return None, None
 
 # Action Button
-if st.button("🔍 Run Screener (Find News + Extremely Bullish Stocks)"):
+if st.button("🔍 Run Screener (Find Fresh News & Breakout Stocks)"):
     results = []
     news_dict = {}
     progress_bar = st.progress(0)
     
-    with st.spinner("Analyzing F&O Stocks for Extremely Bullish Breakouts & News..."):
+    with st.spinner("Filtering Real Fresh News & Extremely Bullish Stocks..."):
         total = len(FNO_STOCKS)
         for idx, stock in enumerate(FNO_STOCKS):
-            res, news = analyze_stock_with_news(stock)
+            res, news = analyze_stock_with_strict_news(stock)
             if res:
                 results.append(res)
-                if news:
+                if news and len(news) > 0:
                     news_dict[stock.replace(".NS", "")] = news
             progress_bar.progress((idx + 1) / total)
             
@@ -101,7 +115,7 @@ if 'screener_data' in st.session_state:
 st.divider()
 
 # Stock Specific News & Live Chart Section
-st.header("📊 Interactive Chart & Live News Section")
+st.header("📊 Interactive Chart & Fresh News Section")
 clean_symbols = [s.replace(".NS", "") for s in FNO_STOCKS]
 selected_stock = st.selectbox("Stock Select Karein (Chart & News Dekhne Ke Liye):", clean_symbols, index=0)
 
@@ -136,10 +150,10 @@ if selected_stock:
         components.html(tv_widget_code, height=520)
 
     with col2:
-        st.subheader(f"📰 {selected_stock} Latest News Headlines")
+        st.subheader(f"📰 {selected_stock} Latest Fresh News Headlines")
         if 'news_data' in st.session_state and selected_stock in st.session_state['news_data']:
             stock_news = st.session_state['news_data'][selected_stock]
-            if stock_news:
+            if stock_news and len(stock_news) > 0:
                 for item in stock_news[:4]:
                     title = item.get('title', 'No Title')
                     publisher = item.get('publisher', 'Market News')
@@ -148,6 +162,6 @@ if selected_stock:
                     st.caption(f"Source: {publisher}")
                     st.write("---")
             else:
-                st.info("Is stock ke liye koi immediate fresh news nahi mili.")
+                st.info("Is stock ke liye pichle 28-48 ghante me koi fresh news nahi mili.")
         else:
-            st.info("Pehle 'Run Screener' button par click karein news load karne ke liye.")
+            st.info("Pehle 'Run Screener' button par click karein news check karne ke liye.")
