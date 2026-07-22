@@ -3,10 +3,10 @@ import yfinance as yf
 import pandas as pd
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Pro F&O Screener with Live News", layout="wide")
+st.set_page_config(page_title="Pro F&O Screener with Live News & Breakouts", layout="wide")
 
-st.title("⚡ Pro Intraday Option Screener & News Tracker")
-st.subheader("Automated Signal, VWAP, Volume Spikes, News Badges & Live Charts")
+st.title("⚡ Pro Intraday Screener: Extremely Bullish & News Stocks")
+st.subheader("Automated Momentum, News Badges, Target/SL & Live Charts")
 
 # Expanded Top FNO Stocks List
 FNO_STOCKS = [
@@ -33,17 +33,26 @@ def analyze_stock_with_news(ticker):
         vwap = float(latest['VWAP'])
         vol = float(latest['Volume'])
         avg_vol = float(df['Volume'].mean())
+        day_high = float(df['High'].max())
         
         if pd.isna(close) or pd.isna(vwap):
             return None, None
         
-        # Signal Determination
-        status = "🟢 BULLISH (Buy CE)" if close > vwap else "🔴 BEARISH (Buy PE)"
+        # Extremely Bullish Logic
+        is_high_volume = vol > (avg_vol * 1.3)
+        near_day_high = close >= (day_high * 0.997)
+        
+        if close > vwap and is_high_volume and near_day_high:
+            status = "🚀 EXTREMELY BULLISH"
+        elif close > vwap:
+            status = "🟢 BULLISH (Buy CE)"
+        else:
+            status = "🔴 BEARISH (Buy PE)"
             
-        # Volume Spurt
-        volume_status = "🔥 High Volume" if vol > (avg_vol * 1.5) else "Normal"
+        # Volume Spurt Status
+        volume_status = "🔥 High Volume Spurt" if is_high_volume else "Normal"
 
-        # News Extraction & Tagging
+        # News Extraction
         news_items = t_obj.news
         has_recent_news = "📰 News Stock" if news_items and len(news_items) > 0 else "---"
 
@@ -53,7 +62,7 @@ def analyze_stock_with_news(ticker):
             "VWAP": round(vwap, 2),
             "Signal": status,
             "News Tag": has_recent_news,
-            "Volume Spike": volume_status,
+            "Volume Momentum": volume_status,
             "Target (T1)": round(close * 1.01, 2) if "BULLISH" in status else round(close * 0.99, 2),
             "Target (T2)": round(close * 1.02, 2) if "BULLISH" in status else round(close * 0.98, 2),
             "Stop Loss (SL)": round(vwap, 2)
@@ -64,12 +73,12 @@ def analyze_stock_with_news(ticker):
         return None, None
 
 # Action Button
-if st.button("🔍 Run Screener with News Finder"):
+if st.button("🔍 Run Screener (Find News + Extremely Bullish Stocks)"):
     results = []
     news_dict = {}
     progress_bar = st.progress(0)
     
-    with st.spinner("Analyzing Market Data & Fetching Latest News..."):
+    with st.spinner("Analyzing F&O Stocks for Extremely Bullish Breakouts & News..."):
         total = len(FNO_STOCKS)
         for idx, stock in enumerate(FNO_STOCKS):
             res, news = analyze_stock_with_news(stock)
@@ -92,7 +101,7 @@ if 'screener_data' in st.session_state:
 st.divider()
 
 # Stock Specific News & Live Chart Section
-st.header("📊 Interactive Chart & Stock News Section")
+st.header("📊 Interactive Chart & Live News Section")
 clean_symbols = [s.replace(".NS", "") for s in FNO_STOCKS]
 selected_stock = st.selectbox("Stock Select Karein (Chart & News Dekhne Ke Liye):", clean_symbols, index=0)
 
@@ -131,7 +140,7 @@ if selected_stock:
         if 'news_data' in st.session_state and selected_stock in st.session_state['news_data']:
             stock_news = st.session_state['news_data'][selected_stock]
             if stock_news:
-                for item in stock_news[:4]:  # Show top 4 news items
+                for item in stock_news[:4]:
                     title = item.get('title', 'No Title')
                     publisher = item.get('publisher', 'Market News')
                     link = item.get('link', '#')
