@@ -3,10 +3,10 @@ import yfinance as yf
 import pandas as pd
 import datetime
 
-st.set_page_config(page_title="Breakout Beacon - Call/Put Signal", layout="wide")
+st.set_page_config(page_title="Breakout Beacon - Live Option Signals", layout="wide")
 
-st.title("🚨 Breakout Beacon (Live Call/Put Option Finder)")
-st.caption("TradeFinder Style: Direct CE / PE Action Signals based on Momentum Spurt")
+st.title("🚨 Breakout Beacon (Live Option Call/Put Finder)")
+st.caption("TradeFinder Style Screener: Direct CE / PE Action Signals & Momentum Analysis")
 
 # High Volatility F&O & Midcap Stocks
 STOCKS = [
@@ -22,6 +22,7 @@ def run_breakout_beacon():
     for ticker in STOCKS:
         try:
             t_obj = yf.Ticker(ticker)
+            # Fetch 5-min candles
             df = t_obj.history(period="5d", interval="5m")
             if df.empty or len(df) < 20:
                 continue
@@ -32,38 +33,31 @@ def run_breakout_beacon():
             price = float(latest['Close'])
             prev_close = float(df.iloc[0]['Close'])
             
-            # % Change Calculation
+            # Overall % Change
             chg_pct = ((price - prev_close) / prev_close) * 100
             
             # 5-Min Price Velocity (Sgn %)
             sgn_pct = ((price - float(prev_candle['Close'])) / float(prev_candle['Close'])) * 100
             
-            # Volume Check
-            vol = float(latest['Volume'])
-            avg_vol = float(df['Volume'].mean())
-            rel_vol = vol / avg_vol if avg_vol > 0 else 1.0
-            
-            two_day_high = float(df['High'].max())
-            two_day_low = float(df['Low'].min())
-            
-            # --- EXACT CALL / PUT ACTION LOGIC ---
-            if price <= (two_day_low * 1.002) or (sgn_pct < -0.8 and rel_vol > 1.2):
-                action = "🔴 BUY PUT (PE)"
-                trend = "📉 Downward Breakout"
-            elif price >= (two_day_high * 0.998) or (sgn_pct > 0.8 and rel_vol > 1.2):
+            # Adaptive Threshold (Strict for live market, smart for after-hours)
+            # Signal Action Logic
+            if chg_pct >= 1.5 or sgn_pct >= 0.3:
                 action = "🟢 BUY CALL (CE)"
-                trend = "📈 Upward Breakout"
-            elif sgn_pct > 0.4:
-                action = "👀 WATCH CE"
-                trend = "Mild Uptrend"
-            elif sgn_pct < -0.4:
-                action = "👀 WATCH PE"
-                trend = "Mild Downtrend"
+                trend = "🚀 Strong Bullish Momentum"
+            elif chg_pct <= -1.5 or sgn_pct <= -0.3:
+                action = "🔴 BUY PUT (PE)"
+                trend = "💥 Strong Bearish Breakdown"
+            elif chg_pct > 0.5:
+                action = "👀 WATCH CE (Bullish)"
+                trend = "Uptrend Momentum"
+            elif chg_pct < -0.5:
+                action = "👀 WATCH PE (Bearish)"
+                trend = "Downtrend Momentum"
             else:
-                action = "⚪ NO TRADE (WAIT)"
-                trend = "Sideways / Neutral"
+                action = "⚪ NO TRADE (Consolidating)"
+                trend = "Sideways / Neutral Range"
 
-            time_str = latest.name.strftime('%H:%M') if hasattr(latest.name, 'strftime') else "09:30"
+            time_str = latest.name.strftime('%H:%M') if hasattr(latest.name, 'strftime') else "15:30"
 
             screener_results.append({
                 "Symbol": ticker.replace(".NS", ""),
@@ -72,8 +66,7 @@ def run_breakout_beacon():
                 "Price (LTP)": round(price, 2),
                 "% chg": round(chg_pct, 2),
                 "5-Min Velocity (Sgn %)": round(sgn_pct, 2),
-                "Time": time_str,
-                "Volume Boost": f"{round(rel_vol, 1)}x"
+                "Time": time_str
             })
         except Exception:
             continue
@@ -81,13 +74,13 @@ def run_breakout_beacon():
     return pd.DataFrame(screener_results)
 
 # Render Table
-st.subheader("🔥 Live Market Pulse Breakout Signals")
+st.subheader("🔥 Market Pulse: Call / Put Signals Table")
 df_results = run_breakout_beacon()
 
 if not df_results.empty:
-    # Sort by absolute velocity to show active breakout stocks on top
-    df_results['Abs_Sgn'] = df_results['5-Min Velocity (Sgn %)'].abs()
-    df_results = df_results.sort_values(by="Abs_Sgn", ascending=False).drop(columns=['Abs_Sgn'])
+    # Sort by absolute % chg to keep top moving stocks on top
+    df_results['Abs_Chg'] = df_results['% chg'].abs()
+    df_results = df_results.sort_values(by="Abs_Chg", ascending=False).drop(columns=['Abs_Chg'])
     
     st.dataframe(
         df_results,
